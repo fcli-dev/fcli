@@ -61,7 +61,7 @@ public final class SCSastControllerScanStartCommand extends AbstractSCSastContro
             .field("username", userName, "text/plain")
             .field("scaVersion", sensorVersion, "text/plain")
             .field("clientVersion", sensorVersion, "text/plain")
-            .field("scaRuntimeArgs", optionsProvider.getScanStartOptions().getScaRuntimeArgs(), "text/plain")
+            .field("scaRuntimeArgs", optionsProvider.getScaRuntimeArgs(), "text/plain")
             .field("jobType", optionsProvider.getScanStartOptions().getJobType().name(), "text/plain");
         body = updateBody(body, "email", email);
         body = updateBody(body, "buildId", optionsProvider.getScanStartOptions().getBuildId());

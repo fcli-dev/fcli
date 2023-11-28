@@ -1,16 +1,16 @@
 name: Build and release
 on:
   workflow_dispatch:
-  
+
   push:
     branches:
       - '**'
-       
+
 env:
   native_image_opts: --verbose -H:Log=registerResource:verbose -H:+PrintClassInitialization
   graal_distribution: graalvm-community
   graal_java_version: 17
-          
+
 jobs:
   build:
     name: Build
@@ -26,15 +26,13 @@ jobs:
       - name: PROD - Prepare GitHub release
         id: create_prod_release
         uses: GoogleCloudPlatform/release-please-action@v3
-        if: github.ref == 'refs/heads/main'
         with:
           command: github-release
           release-type: simple
-          package-name: ${{ github.event.repository.name }}  
+          package-name: ${{ github.event.repository.name }}
           default-branch: main
-          
+
       - name: PROD - Define release info
-        if: steps.create_prod_release.outputs.release_created
         run: |
           tag=${{steps.create_prod_release.outputs.tag_name}}
           version=${{steps.create_prod_release.outputs.version}}
@@ -46,9 +44,8 @@ jobs:
           echo DO_PROD_RELEASE=true >> $GITHUB_ENV
           echo RELEASE_TAG=${tag} >> $GITHUB_ENV
           echo RELEASE_VERSION=${version} >> $GITHUB_ENV
-          
+
       - name: DEV - Define release info
-        if: startsWith(github.ref, 'refs/heads/') && !env.DO_PROD_RELEASE
         run: |
           branch="${GITHUB_REF#refs/heads/}"
           tag="dev_${branch//[^a-zA-Z0-9_.-]/.}" # Replace all special characters by a dot
@@ -65,20 +62,18 @@ jobs:
           else 
             echo "Tag ${tag} does not exist, no development release will be published"
           fi 
-      
+
       - name: Build release ${{env.RELEASE_VERSION}}
-        if: env.DO_BUILD
         run: ./gradlew clean build dist distThirdPartyReleaseAsset distFtest -Pversion=${{env.RELEASE_VERSION}}
-        
+
       - name: Check fcli version
-        if: env.DO_BUILD
         run: java -jar build/libs/fcli.jar --version | tee /dev/stderr | grep -E '[0-9]+\.[0-9]+\.[0-9]+' >/dev/null || (echo "fcli --version doesn't output proper version number"; exit 1)
-        
+
       - name: Publish build artifacts
         uses: actions/upload-artifact@v3
         with:
           path: build/dist/**/*
-          
+
     outputs:
       do_release: ${{ env.DO_RELEASE }}
       do_dev_release: ${{ env.DO_DEV_RELEASE }}
@@ -88,10 +83,10 @@ jobs:
     name: native-image-linux
     needs: build
     runs-on: ubuntu-22.04
-#    env:
-#      TOOLCHAIN_BASE: /opt/musl_cc
-#      TOOLCHAIN_DIR: /opt/musl_cc/x86_64-linux-musl-native
-#      CC: /opt/musl_cc/x86_64-linux-musl-native/bin/gcc
+    #    env:
+    #      TOOLCHAIN_BASE: /opt/musl_cc
+    #      TOOLCHAIN_DIR: /opt/musl_cc/x86_64-linux-musl-native
+    #      CC: /opt/musl_cc/x86_64-linux-musl-native/bin/gcc
     steps:
       - name: Check-out source code
         uses: actions/checkout@v3
@@ -103,17 +98,17 @@ jobs:
           components: 'native-image'
           native-image-musl: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - uses: actions/download-artifact@v3
         with:
           path: ./
 
       # For Linux, we build a statically linked native image, to allow for building a 'FROM scratch'
-      # Docker image, and to avoid libc version issues. Since Jansi is not supported on statically 
-      # linked images (see https://github.com/fusesource/jansi/issues/246), we set a system property 
-      # to indicate that FortifyCLI shouldn't try to invoke AnsiConsole::systemInstall/Uninstall. In 
+      # Docker image, and to avoid libc version issues. Since Jansi is not supported on statically
+      # linked images (see https://github.com/fusesource/jansi/issues/246), we set a system property
+      # to indicate that FortifyCLI shouldn't try to invoke AnsiConsole::systemInstall/Uninstall. In
       # order for FortifyCLI to be able to see this system property, we need to initialize this class
-      # at build time (see https://www.graalvm.org/22.1/reference-manual/native-image/Properties/). 
+      # at build time (see https://www.graalvm.org/22.1/reference-manual/native-image/Properties/).
       # We also exclude the native Jansi library resources, as these are now no longer needed.
       - name: Create native fcli
         run: native-image ${{ env.native_image_opts }} --static --libc=musl -Djansi.disable=true --initialize-at-build-time=com.fortify.cli.app.FortifyCLI -H:ExcludeResources="org/fusesource/jansi/internal/native/.*" -jar ./artifact/release-assets/fcli.jar fcli
@@ -125,7 +120,7 @@ jobs:
 
       - name: Basic test of native fcli
         run: ./fcli --help && ./fcli get --help
-        
+
       - name: Check fcli version
         run: ./fcli --version | tee /dev/stderr | grep -E '[0-9]+\.[0-9]+\.[0-9]+' >/dev/null || (echo "fcli --version doesn't output proper version number"; exit 1)
 
@@ -156,7 +151,7 @@ jobs:
           path: ./
 
       # For MacOS, we build a dynamically linked image. Jansi by default provides a resource-config.json
-      # file to include native libraries for all platforms; we override this to include only the MacOS 
+      # file to include native libraries for all platforms; we override this to include only the MacOS
       # libraries
       - name: Create native fcli
         run: native-image ${{ env.native_image_opts }} -march=compatibility -H:ExcludeResources="org/fusesource/jansi/internal/native/Windows/.*" -H:ExcludeResources="org/fusesource/jansi/internal/native/Linux/.*" -H:ExcludeResources="org/fusesource/jansi/internal/native/FreeBSD/.*" -jar ./artifact/release-assets/fcli.jar fcli
@@ -191,22 +186,22 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           path: ./
-    
-    # For Windows, we build a dynamically linked image. Jansi by default provides a resource-config.json
-    # file to include native libraries for all platforms; we override this to include only the 64-bit
-    # Windows library
+
+      # For Windows, we build a dynamically linked image. Jansi by default provides a resource-config.json
+      # file to include native libraries for all platforms; we override this to include only the 64-bit
+      # Windows library
       - name: Create native fcli
         run: >-
           "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat" &&
           ${{ env.JAVA_HOME }}\bin\native-image.cmd ${{ env.native_image_opts }} -H:ExcludeResources="org/fusesource/jansi/internal/native/Mac/.*" -H:ExcludeResources="org/fusesource/jansi/internal/native/Linux/.*" -H:ExcludeResources="org/fusesource/jansi/internal/native/FreeBSD/.*" -jar .\artifact\release-assets\fcli.jar fcli
         shell: cmd
 
-# We don't compress the Windows binary for now as this is incompatible with current Graal version.
-# See https://github.com/fortify/fcli/issues/148
-#      - name: Compress native fcli
-#        uses: svenstaro/upx-action@v2
-#        with:
-#          files: fcli.exe
+      # We don't compress the Windows binary for now as this is incompatible with current Graal version.
+      # See https://github.com/fortify/fcli/issues/148
+      #      - name: Compress native fcli
+      #        uses: svenstaro/upx-action@v2
+      #        with:
+      #          files: fcli.exe
 
       - name: Basic test of native fcli
         run: |
@@ -219,57 +214,51 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           path: ./artifact/**/fcli-windows.zip
-        
+
   release:
     name: release
-    if: needs.build.outputs.do_release
     needs: [build, native_linux, native_mac, native_win]
     runs-on: ubuntu-latest
     steps:
       - name: Check-out source code
         uses: actions/checkout@v3
-        
+
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
           path: ./
-          
+
       - name: PROD - Prepare release PR
-        if: github.ref == 'refs/heads/main'
         uses: GoogleCloudPlatform/release-please-action@v3
         with:
           command: release-pr
           release-type: simple
           package-name: ${{ github.event.repository.name }}
           default-branch: main
-          
-      - name: DEV - Prepare GitHub release 
-        if: needs.build.outputs.do_dev_release
+
+      - name: DEV - Prepare GitHub release
         run: |
           gh release delete ${{ needs.build.outputs.release_tag }} -y || true
           gh release create ${{ needs.build.outputs.release_tag }} -p -t "Development Release - ${GITHUB_REF#refs/heads/} branch" -n 'See `Assets` section below for latest build artifacts'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: DEV - Update ${{ needs.build.outputs.release_tag }} tag
         uses: richardsimko/update-tag@v1
-        if: needs.build.outputs.do_dev_release
         with:
           tag_name: ${{ needs.build.outputs.release_tag }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
-          
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Upload assets to release
-        if: needs.build.outputs.do_release
         run: |
           files=$(find "./artifact/release-assets" -type f -printf "%p ")
           gh release upload "${{ needs.build.outputs.release_tag }}" $files --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-     
+
   publishPages:
     name: publishPages
-    if: needs.build.outputs.do_release
     needs: [build, release]
     runs-on: ubuntu-latest
     steps:
@@ -278,12 +267,12 @@ jobs:
         with:
           ref: gh-pages
           path: docs
-        
+
       - name: Download artifacts
         uses: actions/download-artifact@v3
         with:
           path: ./
-          
+
       - name: Update documentation from artifact
         run: |
           # Delete all Git-related files
@@ -310,7 +299,7 @@ jobs:
           touch _data/versions/dev.yml
           ls -d v*.*.* | sort -rV | while read line; do echo "- '$line'"; done > _data/versions/release.yml
           ls -d dev_* | sort | while read line; do echo "- '$line'"; done > _data/versions/dev.yml
-          
+
       - name: Deploy documentation
         uses: peaceiris/actions-gh-pages@v3
         with:

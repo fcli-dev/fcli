@@ -12,6 +12,8 @@
  *******************************************************************************/
 package com.fortify.cli.sc_sast.scan.cli.mixin;
 
+import lombok.Getter;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.ArgGroup;
 
 public class SCSastScanStartOptionsArgGroup {
@@ -19,6 +21,8 @@ public class SCSastScanStartOptionsArgGroup {
     private SCSastScanStartMbsOptions mbsOptions;
     @ArgGroup(exclusive = false, headingKey = "fcli.sc-sast.scan.start.package.heading", multiplicity = "1") 
     private SCSastScanStartPackageOptions packageOptions;
+    @Getter @Option(names = {"--sargs"})
+    private String scaRuntimeArgs = "";
     
     public ISCSastScanStartOptions getScanStartOptions() {
         if ( mbsOptions!=null && mbsOptions.getPayloadFile()!=null ) {
